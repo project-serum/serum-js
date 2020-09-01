@@ -171,9 +171,7 @@ export class Market {
     );
     return orders.map((order) => ({
       ...order,
-      clientId: openOrdersAccounts.find((openOrders) =>
-        order.openOrdersAddress.equals(openOrders.address),
-      )?.clientIds[order.openOrdersSlot],
+      clientId: order.clientId,
     }));
   }
 
