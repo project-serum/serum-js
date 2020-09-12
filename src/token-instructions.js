@@ -61,7 +61,7 @@ function encodeTokenInstructionData(instruction) {
   return b.slice(0, span);
 }
 
-function decodeTokenInstructionData(instruction) {
+export function decodeTokenInstructionData(instruction) {
   return LAYOUT.decode(instruction);
 }
 
