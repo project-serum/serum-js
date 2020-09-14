@@ -61,6 +61,10 @@ function encodeTokenInstructionData(instruction) {
   return b.slice(0, span);
 }
 
+export function decodeTokenInstructionData(instruction) {
+  return LAYOUT.decode(instruction);
+}
+
 export function initializeMint({
   mint,
   decimals,
