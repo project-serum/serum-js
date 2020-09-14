@@ -155,7 +155,7 @@ export function mintTo({ mint, destination, amount, mintAuthority }) {
     keys,
     data: encodeTokenInstructionData({
       mintTo: { amount },
-    }), 
+    }),
     programId: TOKEN_PROGRAM_ID,
   });
 }
