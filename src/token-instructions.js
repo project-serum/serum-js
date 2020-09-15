@@ -192,7 +192,7 @@ export async function createTokenAccountTransaction(connection, wallet, mint) {
       newAccountPubkey: newAccount.publicKey,
       lamports: await connection.getMinimumBalanceForRentExemption(165),
       space: 165,
-      programId: exports.TOKEN_PROGRAM_ID,
+      programId: TOKEN_PROGRAM_ID,
     }),
   );
   transaction.add(
