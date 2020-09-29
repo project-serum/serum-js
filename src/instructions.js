@@ -14,6 +14,10 @@ import { TOKEN_PROGRAM_ID } from './token-instructions';
 export const SETTLE_FUNDS_BASE_WALLET_INDEX = 5;
 export const SETTLE_FUNDS_QUOTE_WALLET_INDEX = 6;
 
+// NOTE: Update these if the position of arguments for the newOrder instruction changes
+export const NEW_ORDER_OPEN_ORDERS_INDEX = 1;
+export const NEW_ORDER_OWNER_INDEX = 4;
+
 export const INSTRUCTION_LAYOUT = new VersionedLayout(
   0,
   union(u32('instruction')),
@@ -125,19 +129,28 @@ export class DexInstructions {
     orderType,
     clientId,
     programId,
+    feeDiscountPubkey = null,
   }) {
+    const keys = [
+      { pubkey: market, isSigner: false, isWritable: true },
+      { pubkey: openOrders, isSigner: false, isWritable: true },
+      { pubkey: requestQueue, isSigner: false, isWritable: true },
+      { pubkey: payer, isSigner: false, isWritable: true },
+      { pubkey: owner, isSigner: true, isWritable: false },
+      { pubkey: baseVault, isSigner: false, isWritable: true },
+      { pubkey: quoteVault, isSigner: false, isWritable: true },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
+    ];
+    if (feeDiscountPubkey) {
+      keys.push({
+        pubkey: feeDiscountPubkey,
+        isSigner: false,
+        isWritable: false,
+      });
+    }
     return new TransactionInstruction({
-      keys: [
-        { pubkey: market, isSigner: false, isWritable: true },
-        { pubkey: openOrders, isSigner: false, isWritable: true },
-        { pubkey: requestQueue, isSigner: false, isWritable: true },
-        { pubkey: payer, isSigner: false, isWritable: true },
-        { pubkey: owner, isSigner: true, isWritable: false },
-        { pubkey: baseVault, isSigner: false, isWritable: true },
-        { pubkey: quoteVault, isSigner: false, isWritable: true },
-        { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-        { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
-      ],
+      keys,
       programId,
       data: encodeInstruction({
         newOrder: clientId
@@ -251,19 +264,28 @@ export class DexInstructions {
     quoteWallet,
     vaultSigner,
     programId,
+    referrerQuoteWallet = null,
   }) {
+    const keys = [
+      { pubkey: market, isSigner: false, isWritable: true },
+      { pubkey: openOrders, isSigner: false, isWritable: true },
+      { pubkey: owner, isSigner: true, isWritable: false },
+      { pubkey: baseVault, isSigner: false, isWritable: true },
+      { pubkey: quoteVault, isSigner: false, isWritable: true },
+      { pubkey: baseWallet, isSigner: false, isWritable: true },
+      { pubkey: quoteWallet, isSigner: false, isWritable: true },
+      { pubkey: vaultSigner, isSigner: false, isWritable: false },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    ];
+    if (referrerQuoteWallet) {
+      keys.push({
+        pubkey: referrerQuoteWallet,
+        isSigner: false,
+        isWritable: true,
+      });
+    }
     return new TransactionInstruction({
-      keys: [
-        { pubkey: market, isSigner: false, isWritable: true },
-        { pubkey: openOrders, isSigner: false, isWritable: true },
-        { pubkey: owner, isSigner: true, isWritable: false },
-        { pubkey: baseVault, isSigner: false, isWritable: true },
-        { pubkey: quoteVault, isSigner: false, isWritable: true },
-        { pubkey: baseWallet, isSigner: false, isWritable: true },
-        { pubkey: quoteWallet, isSigner: false, isWritable: true },
-        { pubkey: vaultSigner, isSigner: false, isWritable: false },
-        { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-      ],
+      keys,
       programId,
       data: encodeInstruction({
         settleFunds: {},

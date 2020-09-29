@@ -16,14 +16,20 @@ import {
 } from '@solana/web3.js';
 import { decodeEventQueue, decodeRequestQueue } from './queue';
 import { Buffer } from 'buffer';
+import { getFeeTier, supportsSrmFeeDiscounts } from './fees';
 import {
   closeAccount,
   initializeAccount,
+  MSRM_DECIMALS,
+  MSRM_MINT,
+  SRM_DECIMALS,
+  SRM_MINT,
   TOKEN_PROGRAM_ID,
   WRAPPED_SOL_MINT,
 } from './token-instructions';
+import { getLayoutVersion } from './tokens_and_markets';
 
-export const MARKET_STATE_LAYOUT = struct([
+export const _MARKET_STAT_LAYOUT_V1 = struct([
   blob(5),
 
   accountFlagsLayout('accountFlags'),
@@ -59,6 +65,44 @@ export const MARKET_STATE_LAYOUT = struct([
   blob(7),
 ]);
 
+export const _MARKET_STATE_LAYOUT_V2 = struct([
+  blob(5),
+
+  accountFlagsLayout('accountFlags'),
+
+  publicKeyLayout('ownAddress'),
+
+  u64('vaultSignerNonce'),
+
+  publicKeyLayout('baseMint'),
+  publicKeyLayout('quoteMint'),
+
+  publicKeyLayout('baseVault'),
+  u64('baseDepositsTotal'),
+  u64('baseFeesAccrued'),
+
+  publicKeyLayout('quoteVault'),
+  u64('quoteDepositsTotal'),
+  u64('quoteFeesAccrued'),
+
+  u64('quoteDustThreshold'),
+
+  publicKeyLayout('requestQueue'),
+  publicKeyLayout('eventQueue'),
+
+  publicKeyLayout('bids'),
+  publicKeyLayout('asks'),
+
+  u64('baseLotSize'),
+  u64('quoteLotSize'),
+
+  u64('feeRateBps'),
+
+  u64('referrerRebatesAccrued'),
+
+  blob(7),
+]);
+
 export class Market {
   private _decoded: any;
   private _baseSplTokenDecimals: number;
@@ -68,6 +112,18 @@ export class Market {
   private _programId: PublicKey;
   private _openOrdersAccountsCache: {
     [publickKey: string]: { accounts: OpenOrders[]; ts: number };
+  };
+
+  private _feeDiscountKeysCache: {
+    [publicKey: string]: {
+      accounts: Array<{
+        balance: number;
+        mint: PublicKey;
+        pubkey: PublicKey;
+        feeTier: number;
+      }>;
+      ts: number;
+    };
   };
 
   constructor(
@@ -88,10 +144,14 @@ export class Market {
     this._confirmations = confirmations;
     this._programId = programId;
     this._openOrdersAccountsCache = {};
+    this._feeDiscountKeysCache = {};
   }
 
-  static get LAYOUT() {
-    return MARKET_STATE_LAYOUT;
+  static getLayout(programId: PublicKey) {
+    if (getLayoutVersion(programId) === 1) {
+      return _MARKET_STAT_LAYOUT_V1;
+    }
+    return _MARKET_STATE_LAYOUT_V2;
   }
 
   static async load(
@@ -107,7 +167,7 @@ export class Market {
     if (!owner.equals(programId)) {
       throw new Error('Address not owned by program: ' + owner.toBase58());
     }
-    const decoded = MARKET_STATE_LAYOUT.decode(data);
+    const decoded = this.getLayout(programId).decode(data);
     if (
       !decoded.accountFlags.initialized ||
       !decoded.accountFlags.market ||
@@ -126,6 +186,10 @@ export class Market {
       options,
       programId,
     );
+  }
+
+  get programId(): PublicKey {
+    return this._programId;
   }
 
   get address(): PublicKey {
@@ -210,9 +274,21 @@ export class Market {
       }
       return wrapped;
     }
+    return await this.getTokenAccountsByOwnerForMint(
+      connection,
+      ownerAddress,
+      this.baseMintAddress,
+    );
+  }
+
+  async getTokenAccountsByOwnerForMint(
+    connection: Connection,
+    ownerAddress: PublicKey,
+    mintAddress: PublicKey,
+  ): Promise<Array<{ pubkey: PublicKey; account: AccountInfo<Buffer> }>> {
     return (
       await connection.getTokenAccountsByOwner(ownerAddress, {
-        mint: this.baseMintAddress,
+        mint: mintAddress,
       })
     ).value;
   }
@@ -232,11 +308,11 @@ export class Market {
       }
       return wrapped;
     }
-    return (
-      await connection.getTokenAccountsByOwner(ownerAddress, {
-        mint: this.quoteMintAddress,
-      })
-    ).value;
+    return await this.getTokenAccountsByOwnerForMint(
+      connection,
+      ownerAddress,
+      this.quoteMintAddress,
+    );
   }
 
   async findOpenOrdersAccountsForOwner(
@@ -276,6 +352,7 @@ export class Market {
       orderType = 'limit',
       clientId,
       openOrdersAddressKey,
+      feeDiscountPubkey,
     }: OrderParams,
   ) {
     const { transaction, signers } = await this.makePlaceOrderTransaction(
@@ -289,9 +366,138 @@ export class Market {
         orderType,
         clientId,
         openOrdersAddressKey,
+        feeDiscountPubkey,
       },
     );
     return await this._sendTransaction(connection, transaction, signers);
+  }
+
+  getSplTokenBalanceFromAccountInfo(
+    accountInfo: AccountInfo<Buffer>,
+    decimals: number,
+  ): number {
+    return divideBnToNumber(
+      new BN(accountInfo.data.slice(64, 72), 10, 'le'),
+      new BN(10).pow(new BN(decimals)),
+    );
+  }
+
+  get supportsSrmFeeDiscounts() {
+    return supportsSrmFeeDiscounts(this._programId);
+  }
+
+  get supportsReferralFees() {
+    return getLayoutVersion(this._programId) > 1;
+  }
+
+  async findFeeDiscountKeys(
+    connection: Connection,
+    ownerAddress: PublicKey,
+    cacheDurationMs = 0,
+  ): Promise<
+    Array<{
+      pubkey: PublicKey;
+      feeTier: number;
+      balance: number;
+      mint: PublicKey;
+    }>
+  > {
+    let sortedAccounts: Array<{
+      balance: number;
+      mint: PublicKey;
+      pubkey: PublicKey;
+      feeTier: number;
+    }> = [];
+    const now = new Date().getTime();
+    const strOwner = ownerAddress.toBase58();
+    if (
+      strOwner in this._feeDiscountKeysCache &&
+      now - this._feeDiscountKeysCache[strOwner].ts < cacheDurationMs
+    ) {
+      return this._feeDiscountKeysCache[strOwner].accounts;
+    }
+
+    if (this.supportsSrmFeeDiscounts) {
+      // Fee discounts based on (M)SRM holdings supported in newer versions
+      const msrmAccounts = (
+        await this.getTokenAccountsByOwnerForMint(
+          connection,
+          ownerAddress,
+          MSRM_MINT,
+        )
+      ).map(({ pubkey, account }) => {
+        const balance = this.getSplTokenBalanceFromAccountInfo(
+          account,
+          MSRM_DECIMALS,
+        );
+        return {
+          pubkey,
+          mint: MSRM_MINT,
+          balance,
+          feeTier: getFeeTier(balance, 0),
+        };
+      });
+      const srmAccounts = (
+        await this.getTokenAccountsByOwnerForMint(
+          connection,
+          ownerAddress,
+          SRM_MINT,
+        )
+      ).map(({ pubkey, account }) => {
+        const balance = this.getSplTokenBalanceFromAccountInfo(
+          account,
+          SRM_DECIMALS,
+        );
+        return {
+          pubkey,
+          mint: SRM_MINT,
+          balance,
+          feeTier: getFeeTier(0, balance),
+        };
+      });
+      sortedAccounts = msrmAccounts.concat(srmAccounts).sort((a, b) => {
+        if (a.feeTier > b.feeTier) {
+          return -1;
+        } else if (a.feeTier < b.feeTier) {
+          return 1;
+        } else {
+          if (a.balance > b.balance) {
+            return -1;
+          } else if (a.balance < b.balance) {
+            return 1;
+          } else {
+            return 0;
+          }
+        }
+      });
+    }
+    this._feeDiscountKeysCache[strOwner] = {
+      accounts: sortedAccounts,
+      ts: now,
+    };
+    return sortedAccounts;
+  }
+
+  async findBestFeeDiscountKey(
+    connection: Connection,
+    ownerAddress: PublicKey,
+    cacheDurationMs = 0,
+  ): Promise<{ pubkey: PublicKey | null; feeTier: number }> {
+    const accounts = await this.findFeeDiscountKeys(
+      connection,
+      ownerAddress,
+      cacheDurationMs,
+    );
+    if (accounts.length > 0) {
+      return {
+        pubkey: accounts[0].pubkey,
+        feeTier: accounts[0].feeTier,
+      };
+    }
+    return {
+      pubkey: null,
+      feeTier: 0,
+    };
   }
 
   async makePlaceOrderTransaction<T extends PublicKey | Account>(
@@ -305,8 +511,10 @@ export class Market {
       orderType = 'limit',
       clientId,
       openOrdersAddressKey,
+      feeDiscountPubkey = null,
     }: OrderParams<T>,
     cacheDurationMs = 0,
+    feeDiscountPubkeyCacheDurationMs = 0,
   ) {
     // @ts-ignore
     const ownerAddress: PublicKey = owner.publicKey ?? owner;
@@ -314,9 +522,22 @@ export class Market {
       connection,
       ownerAddress,
       cacheDurationMs,
-    ); // TODO: cache this
+    );
     const transaction = new Transaction();
     const signers: (T | Account)[] = [owner];
+
+    // Fetch an SRM fee discount key if the market supports discounts and it is not supplied
+    feeDiscountPubkey =
+      feeDiscountPubkey ||
+      (this.supportsSrmFeeDiscounts
+        ? (
+            await this.findBestFeeDiscountKey(
+              connection,
+              ownerAddress,
+              feeDiscountPubkeyCacheDurationMs,
+            )
+          ).pubkey
+        : null);
 
     let openOrdersAddress;
     if (openOrdersAccounts.length === 0) {
@@ -391,6 +612,7 @@ export class Market {
       orderType,
       clientId,
       openOrdersAddressKey: openOrdersAddress,
+      feeDiscountPubkey,
     });
     transaction.add(placeOrderInstruction);
 
@@ -418,6 +640,7 @@ export class Market {
       orderType = 'limit',
       clientId,
       openOrdersAddressKey,
+      feeDiscountPubkey = null,
     }: OrderParams<T>,
   ): TransactionInstruction {
     // @ts-ignore
@@ -427,6 +650,9 @@ export class Market {
     }
     if (this.priceNumberToLots(price).lte(new BN(0))) {
       throw new Error('invalid price');
+    }
+    if (!this.supportsSrmFeeDiscounts) {
+      feeDiscountPubkey = null;
     }
     return DexInstructions.newOrder({
       market: this.address,
@@ -442,6 +668,7 @@ export class Market {
       orderType,
       clientId,
       programId: this._programId,
+      feeDiscountPubkey,
     });
   }
 
@@ -542,15 +769,20 @@ export class Market {
     openOrders: OpenOrders,
     baseWallet: PublicKey,
     quoteWallet: PublicKey,
+    referrerQuoteWallet: PublicKey | null = null,
   ) {
     if (!openOrders.owner.equals(owner.publicKey)) {
       throw new Error('Invalid open orders account');
+    }
+    if (referrerQuoteWallet && !this.supportsReferralFees) {
+      throw new Error('This program ID does not support referrerQuoteWallet');
     }
     const { transaction, signers } = await this.makeSettleFundsTransaction(
       connection,
       openOrders,
       baseWallet,
       quoteWallet,
+      referrerQuoteWallet,
     );
     signers[0] = owner;
     // @ts-ignore
@@ -562,6 +794,7 @@ export class Market {
     openOrders: OpenOrders,
     baseWallet: PublicKey,
     quoteWallet: PublicKey,
+    referrerQuoteWallet: PublicKey | null = null,
   ) {
     // @ts-ignore
     const vaultSigner = await PublicKey.createProgramAddress(
@@ -619,6 +852,7 @@ export class Market {
             : quoteWallet,
         vaultSigner,
         programId: this._programId,
+        referrerQuoteWallet,
       }),
     );
 
@@ -813,9 +1047,10 @@ export interface OrderParams<T = Account> {
   orderType?: 'limit' | 'ioc' | 'postOnly';
   clientId?: BN;
   openOrdersAddressKey?: PublicKey;
+  feeDiscountPubkey?: PublicKey | null;
 }
 
-export const OPEN_ORDERS_LAYOUT = struct([
+export const _OPEN_ORDERS_LAYOUT_V1 = struct([
   blob(5),
 
   accountFlagsLayout('accountFlags'),
@@ -834,6 +1069,31 @@ export const OPEN_ORDERS_LAYOUT = struct([
 
   seq(u128(), 128, 'orders'),
   seq(u64(), 128, 'clientIds'),
+
+  blob(7),
+]);
+
+export const _OPEN_ORDERS_LAYOUT_V2 = struct([
+  blob(5),
+
+  accountFlagsLayout('accountFlags'),
+
+  publicKeyLayout('market'),
+  publicKeyLayout('owner'),
+
+  // These are in spl-token (i.e. not lot) units
+  u64('baseTokenFree'),
+  u64('baseTokenTotal'),
+  u64('quoteTokenFree'),
+  u64('quoteTokenTotal'),
+
+  u128('freeSlotBits'),
+  u128('isBidBits'),
+
+  seq(u128(), 128, 'orders'),
+  seq(u64(), 128, 'clientIds'),
+
+  u64('referrerRebatesAccrued'),
 
   blob(7),
 ]);
@@ -859,8 +1119,11 @@ export class OpenOrders {
     Object.assign(this, decoded);
   }
 
-  static get LAYOUT() {
-    return OPEN_ORDERS_LAYOUT;
+  static getLayout(programId: PublicKey) {
+    if (getLayoutVersion(programId) === 1) {
+      return _OPEN_ORDERS_LAYOUT_V1;
+    }
+    return _OPEN_ORDERS_LAYOUT_V2;
   }
 
   static async findForOwner(
@@ -871,12 +1134,12 @@ export class OpenOrders {
     const filters = [
       {
         memcmp: {
-          offset: OPEN_ORDERS_LAYOUT.offsetOf('owner'),
+          offset: this.getLayout(programId).offsetOf('owner'),
           bytes: ownerAddress.toBase58(),
         },
       },
       {
-        dataSize: OPEN_ORDERS_LAYOUT.span,
+        dataSize: this.getLayout(programId).span,
       },
     ];
     const accounts = await getFilteredProgramAccounts(
@@ -898,18 +1161,18 @@ export class OpenOrders {
     const filters = [
       {
         memcmp: {
-          offset: OPEN_ORDERS_LAYOUT.offsetOf('market'),
+          offset: this.getLayout(programId).offsetOf('market'),
           bytes: marketAddress.toBase58(),
         },
       },
       {
         memcmp: {
-          offset: OPEN_ORDERS_LAYOUT.offsetOf('owner'),
+          offset: this.getLayout(programId).offsetOf('owner'),
           bytes: ownerAddress.toBase58(),
         },
       },
       {
-        dataSize: OPEN_ORDERS_LAYOUT.span,
+        dataSize: this.getLayout(programId).span,
       },
     ];
     const accounts = await getFilteredProgramAccounts(
@@ -943,7 +1206,7 @@ export class OpenOrders {
     if (!owner.equals(programId)) {
       throw new Error('Address not owned by program');
     }
-    const decoded = OPEN_ORDERS_LAYOUT.decode(data);
+    const decoded = this.getLayout(programId).decode(data);
     if (!decoded.accountFlags.initialized || !decoded.accountFlags.openOrders) {
       throw new Error('Invalid open orders account');
     }
@@ -961,9 +1224,9 @@ export class OpenOrders {
       fromPubkey: ownerAddress,
       newAccountPubkey: newAccountAddress,
       lamports: await connection.getMinimumBalanceForRentExemption(
-        OPEN_ORDERS_LAYOUT.span,
+        this.getLayout(programId).span,
       ),
-      space: OPEN_ORDERS_LAYOUT.span,
+      space: this.getLayout(programId).span,
       programId,
     });
   }
