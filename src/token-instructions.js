@@ -3,9 +3,6 @@ import {
   PublicKey,
   SYSVAR_RENT_PUBKEY,
   TransactionInstruction,
-  Account,
-  SystemProgram,
-  Transaction,
 } from '@solana/web3.js';
 import { publicKeyLayout } from './layout';
 
@@ -183,30 +180,4 @@ export function closeAccount({ source, destination, owner }) {
     }),
     programId: TOKEN_PROGRAM_ID,
   });
-}
-
-export async function createTokenAccountTransaction(connection, wallet, mint) {
-  let newAccount = new Account();
-  const transaction = new Transaction();
-  transaction.add(
-    SystemProgram.createAccount({
-      fromPubkey: wallet.publicKey,
-      newAccountPubkey: newAccount.publicKey,
-      lamports: await connection.getMinimumBalanceForRentExemption(165),
-      space: 165,
-      programId: TOKEN_PROGRAM_ID,
-    }),
-  );
-  transaction.add(
-    initializeAccount({
-      account: newAccount.publicKey,
-      mint,
-      owner: wallet.publicKey,
-    }),
-  );
-  return {
-    transaction,
-    newAccountPubkey: newAccount.publicKey,
-    signers: [wallet.publicKey, newAccount],
-  };
 }
