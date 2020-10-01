@@ -23,6 +23,30 @@ yarn add @solana/web3.js @project-serum/serum
 
 This guide will cover every aspect of Serum-JS and how it can be used to interact with the Serum DEX. For a technical introduction to the Serum DEX, please take a look at: https://docs.google.com/document/d/1isGJES4jzQutI0GtQGuqtrBUqeHxl_xJNXdtOv4SdII
 
+To interact with the DEX, a Wallet adapter is needed: https://github.com/project-serum/sol-wallet-adapter.
+This library will act as mediary between the frond-end and the Wallet, allowing dApps to use third-party wallets to sign transactions.
+
+### Install
+
+```
+npm install --save sol-wallet-adapter
+```
+
+### Usage
+
+```js
+import Wallet from '@project-serum/sol-wallet-adapter';
+let endpoint = {
+  name: 'mainnet-beta',
+  endpoint: 'https://solana-api.projectserum.com',
+};
+let providerUrl = 'https://www.sollet.io'; // wallet provider
+let wallet = useMemo(() => new Wallet(providerUrl, endpoint), [
+  providerUrl,
+  endpoint,
+]);
+```
+
 ## Retrieving market data
 
 Loading a market
@@ -125,49 +149,14 @@ let openOrdersAccounts = await OpenOrders.findForOwner(
 );
 ```
 
-## Interacting with the DEX
-
-To interact with the DEX, a Wallet adapter is needed: https://github.com/project-serum/sol-wallet-adapter.
-This library will act as mediary between the frond-end and the Wallet, allowing dApps to use third-party wallets to sign transactions.
-
-### Install
-
-`npm install --save sol-wallet-adapter`
-
-### Usage
-
-```js
-import Wallet from '@project-serum/sol-wallet-adapter';
-let endpoint = {
-  name: 'mainnet-beta',
-  endpoint: 'https://solana-api.projectserum.com',
-};
-let providerUrl = 'https://www.sollet.io'; // wallet provider
-let wallet = useMemo(() => new Wallet(providerUrl, endpoint), [
-  providerUrl,
-  endpoint,
-]);
-```
+# Interacting with the DEX
 
 Interacting with the DEX is done by creating a transaction which is then send onto the Solana blockchain.
 Follow the instructions below on how to create and send transations.
 
-### Sending a transaction
+## Creating transations
 
-```js
-// see examples below on how to create a transaction
-async function sendTransaction(transaction, signers = [wallet.publicKey]) {
-  let { blockhash } = await connection.getRecentBlockhash();
-  transaction.recentBlockhash = blockhash;
-  transaction.signPartial(...signers);
-
-  let signed = await wallet.signTransaction(transaction);
-  let txid = await connection.sendRawTransaction(signed.serialize());
-  await connection.confirmTransaction(txid);
-}
-```
-
-### Creating a new order transaction
+### New order transaction
 
 New order and cancellation requests make it onto the request queue. To process this queue, match order instructions are needed.
 For more info: https://docs.google.com/document/d/1isGJES4jzQutI0GtQGuqtrBUqeHxl_xJNXdtOv4SdII
@@ -209,7 +198,7 @@ transaction.add(placeOrderTx);
 transaction.add(market.makeMatchOrdersTransaction(5));
 ```
 
-### Creating a cancel order transaction
+### Cancel order transaction
 
 ```js
 let orders = await market.loadOrdersForOwner(connection, wallet.publicKey);
@@ -223,7 +212,7 @@ transaction.add(market.makeMatchOrdersTransaction(5));
 let signers = [wallet.publicKey];
 ```
 
-### Creating a settle funds transaction
+### Settle funds transaction
 
 ```js
 let openOrdersAccounts = await market.findOpenOrdersAccountsForOwner(
@@ -252,7 +241,7 @@ let { transaction, signers } = await market.makeSettleFundsTransaction(
 );
 ```
 
-### Create SOL token transfer transaction
+### SOL token transfer transaction
 
 ```js
 import { SystemProgram, PublicKey } from '@solana/web3.js';
@@ -266,7 +255,7 @@ let transaction = SystemProgram.transfer({
 let signers = [wallet.publicKey];
 ```
 
-### Create SPL token transfer transaction
+### SPL token transfer transaction
 
 ```js
 import { TokenInstructions } from '@project-serum/serum';
@@ -285,7 +274,7 @@ let transaction = new Transaction().add(
 let signers = [wallet.publicKey];
 ```
 
-### Create token accounts
+### Create token accounts transaction
 
 ```js
 import { TokenInstructions } from '@project-serum/serum';
@@ -293,8 +282,8 @@ import { SystemProgram } from '@solana/web3.js';
 
 let mint = new PublicKey('...'); // token mint address
 
-const newAccount = new Account();
-const transaction = SystemProgram.createAccount({
+let newAccount = new Account();
+let transaction = SystemProgram.createAccount({
   fromPubkey: wallet.publicKey,
   newAccountPubkey: newAccount.publicKey,
   lamports: await connection.getMinimumBalanceForRentExemption(165),
@@ -309,4 +298,19 @@ transaction.add(
   }),
 );
 let signers = [newAccount, wallet.publicKey];
+```
+
+## Sending a transaction
+
+```js
+// see examples above on how to create a transaction
+async function sendTransaction(transaction, signers = [wallet.publicKey]) {
+  let { blockhash } = await connection.getRecentBlockhash();
+  transaction.recentBlockhash = blockhash;
+  transaction.signPartial(...signers);
+
+  let signed = await wallet.signTransaction(transaction);
+  let txid = await connection.sendRawTransaction(signed.serialize());
+  await connection.confirmTransaction(txid);
+}
 ```
