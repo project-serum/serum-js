@@ -5,7 +5,8 @@ import { DexInstructions } from './instructions';
 import BN from 'bn.js';
 import {
   Account,
-  AccountInfo, Commitment,
+  AccountInfo,
+  Commitment,
   Connection,
   LAMPORTS_PER_SOL,
   PublicKey,
@@ -355,20 +356,19 @@ export class Market {
       feeDiscountPubkey,
     }: OrderParams,
   ) {
-    const { transaction, signers } = await this.makePlaceOrderTransaction(
-      connection,
-      {
-        owner,
-        payer,
-        side,
-        price,
-        size,
-        orderType,
-        clientId,
-        openOrdersAddressKey,
-        feeDiscountPubkey,
-      },
-    );
+    const { transaction, signers } = await this.makePlaceOrderTransaction<
+      Account
+    >(connection, {
+      owner,
+      payer,
+      side,
+      price,
+      size,
+      orderType,
+      clientId,
+      openOrdersAddressKey,
+      feeDiscountPubkey,
+    });
     return await this._sendTransaction(connection, transaction, signers);
   }
 
@@ -777,18 +777,18 @@ export class Market {
     }
     const { transaction, signers } = await this.makeSettleFundsTransaction(
       connection,
+      owner,
       openOrders,
       baseWallet,
       quoteWallet,
       referrerQuoteWallet,
     );
-    signers[0] = owner;
-    // @ts-ignore
     return await this._sendTransaction(connection, transaction, signers);
   }
 
   async makeSettleFundsTransaction(
     connection: Connection,
+    owner: Account,
     openOrders: OpenOrders,
     baseWallet: PublicKey,
     quoteWallet: PublicKey,
@@ -804,7 +804,7 @@ export class Market {
     );
 
     const transaction = new Transaction();
-    const signers: [Account | PublicKey] = [openOrders.owner];
+    const signers: Account[] = [owner];
 
     let wrappedSolAccount: Account | null = null;
     if (
