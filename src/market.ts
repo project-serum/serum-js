@@ -5,7 +5,7 @@ import { DexInstructions } from './instructions';
 import BN from 'bn.js';
 import {
   Account,
-  AccountInfo,
+  AccountInfo, Commitment,
   Connection,
   LAMPORTS_PER_SOL,
   PublicKey,
@@ -108,7 +108,7 @@ export class Market {
   private _baseSplTokenDecimals: number;
   private _quoteSplTokenDecimals: number;
   private _skipPreflight: boolean;
-  private _confirmations: number;
+  private _commitment: Commitment;
   private _programId: PublicKey;
   private _openOrdersAccountsCache: {
     [publickKey: string]: { accounts: OpenOrders[]; ts: number };
@@ -133,7 +133,7 @@ export class Market {
     options: MarketOptions = {},
     programId: PublicKey,
   ) {
-    const { skipPreflight = false, confirmations = 0 } = options;
+    const { skipPreflight = false, commitment = 'recent' } = options;
     if (!decoded.accountFlags.initialized || !decoded.accountFlags.market) {
       throw new Error('Invalid market state');
     }
@@ -141,7 +141,7 @@ export class Market {
     this._baseSplTokenDecimals = baseMintDecimals;
     this._quoteSplTokenDecimals = quoteMintDecimals;
     this._skipPreflight = skipPreflight;
-    this._confirmations = confirmations;
+    this._commitment = commitment;
     this._programId = programId;
     this._openOrdersAccountsCache = {};
     this._feeDiscountKeysCache = {};
@@ -680,14 +680,12 @@ export class Market {
     const signature = await connection.sendTransaction(transaction, signers, {
       skipPreflight: this._skipPreflight,
     });
-    if (this._confirmations > 0) {
-      const { value } = await connection.confirmTransaction(
-        signature,
-        this._confirmations,
-      );
-      if (value?.err) {
-        throw new Error(JSON.stringify(value.err));
-      }
+    const { value } = await connection.confirmTransaction(
+      signature,
+      this._commitment,
+    );
+    if (value?.err) {
+      throw new Error(JSON.stringify(value.err));
     }
     return signature;
   }
@@ -1035,7 +1033,7 @@ export class Market {
 
 export interface MarketOptions {
   skipPreflight?: boolean;
-  confirmations?: number;
+  commitment?: Commitment;
 }
 
 export interface OrderParams<T = Account> {

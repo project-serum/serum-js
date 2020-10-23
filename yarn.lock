@@ -498,10 +498,10 @@
   dependencies:
     "@sinonjs/commons" "^1.7.0"
 
-"@solana/web3.js@^0.71.10":
-  version "0.71.10"
-  resolved "https://registry.yarnpkg.com/@solana/web3.js/-/web3.js-0.71.10.tgz#79e8977e54be2c521c4b148bd95502ae31d124f9"
-  integrity sha512-f2IdMySxFDHWxpAiXcSwn+CA7XKGTDSY2Ko0EOpdJJmNEW/BqnQ7BOw/R1OO8ZtDihHZn7sAyVmPo7kupmgOfA==
+"@solana/web3.js@0.75.0":
+  version "0.75.0"
+  resolved "https://registry.yarnpkg.com/@solana/web3.js/-/web3.js-0.75.0.tgz#585c81c001fcfe53fe7e51d94b2188531adfcc1e"
+  integrity sha512-goWSloQQbd7MLBxi/ViUvNIKg/uVQNVw/TvjsilZNnFiHv6WtNdUOnZFQbF8Nc7UDxeh+5TUbGkjavf0qzEbbA==
   dependencies:
     "@babel/runtime" "^7.3.1"
     bn.js "^5.0.0"
@@ -514,7 +514,7 @@
     mz "^2.7.0"
     node-fetch "^2.2.0"
     npm-run-all "^4.1.5"
-    rpc-websockets "^7.1.0"
+    rpc-websockets "^7.4.2"
     superstruct "^0.8.3"
     tweetnacl "^1.0.0"
     ws "^7.0.0"
@@ -1933,10 +1933,10 @@ esutils@^2.0.2:
   resolved "https://registry.yarnpkg.com/esutils/-/esutils-2.0.3.tgz#74d2eb4de0b8da1293711910d50775b9b710ef64"
   integrity sha512-kVscqXk4OCp68SZ0dkgEKVi6/8ij300KBWTJq32P/dYeWTSwK41WyTxalN1eRmA5Z9UU/LX9D7FWSmV9SAYx6g==
 
-eventemitter3@^4.0.6:
-  version "4.0.6"
-  resolved "https://registry.yarnpkg.com/eventemitter3/-/eventemitter3-4.0.6.tgz#1258f6fa51b4908aadc2cd624fcd6e64f99f49d6"
-  integrity sha512-s3GJL04SQoM+gn2c14oyqxvZ3Pcq7cduSDqy3sBFXx6UPSUmgVYwQM9zwkTn9je0lrfg0gHEwR42pF3Q2dCQkQ==
+eventemitter3@^4.0.7:
+  version "4.0.7"
+  resolved "https://registry.yarnpkg.com/eventemitter3/-/eventemitter3-4.0.7.tgz#2de9b68f6528d5644ef5c59526a1b4a07306169f"
+  integrity sha512-8guHBZCwKnFhYdHr2ysuRWErTwhoN2X8XELRlrRwpmfeY2jjuUN4taQMsULKUVo1K4DvZl+0pgfyoysHxvmvEw==
 
 exec-sh@^0.3.2:
   version "0.3.4"
@@ -3567,11 +3567,6 @@ natural-compare@^1.4.0:
   resolved "https://registry.yarnpkg.com/natural-compare/-/natural-compare-1.4.0.tgz#4abebfeed7541f2c27acfb29bdbbd15c8d5ba4f7"
   integrity sha1-Sr6/7tdUHywnrPspvbvRXI1bpPc=
 
-next-tick@^1.1.0:
-  version "1.1.0"
-  resolved "https://registry.yarnpkg.com/next-tick/-/next-tick-1.1.0.tgz#1836ee30ad56d67ef281b22bd199f709449b35eb"
-  integrity sha512-CXdUiJembsNjuToQvxayPZF9Vqht7hewsvy2sOWafLvi2awflj9mOC6bHIg50orX8IJvWKY9wYQ/zB2kogPslQ==
-
 nice-try@^1.0.4:
   version "1.0.5"
   resolved "https://registry.yarnpkg.com/nice-try/-/nice-try-1.0.5.tgz#a3378a7696ce7d223e88fc9b764bd7ef1089e366"
@@ -4228,16 +4223,15 @@ rimraf@^3.0.0:
   dependencies:
     glob "^7.1.3"
 
-rpc-websockets@^7.1.0:
-  version "7.3.1"
-  resolved "https://registry.yarnpkg.com/rpc-websockets/-/rpc-websockets-7.3.1.tgz#6519eca406d960f8ae1881874941d9fa05bf6728"
-  integrity sha512-7DhZirsTQv4UMS/9q9t3Urhb6kmh3iLyqIFeuhKmQtsmLP3fWrc2KyfoU5zuiBR7HP1IaNhEc3y8rL9SyCXqbw==
+rpc-websockets@^7.4.2:
+  version "7.4.6"
+  resolved "https://registry.yarnpkg.com/rpc-websockets/-/rpc-websockets-7.4.6.tgz#a0053ad36e893774cdd0edb72ac577deaf34f247"
+  integrity sha512-vDGdyJv858O5ZIc7glov8pQDdFztOqujA7iNyrfPxw87ajHT5s8WQU4MLNEG8pTR/xzqOn06dYH7kef2hijInw==
   dependencies:
     "@babel/runtime" "^7.11.2"
     assert-args "^1.2.1"
     circular-json "^0.5.9"
-    eventemitter3 "^4.0.6"
-    next-tick "^1.1.0"
+    eventemitter3 "^4.0.7"
     uuid "^8.3.0"
     ws "^7.3.1"
   optionalDependencies:
