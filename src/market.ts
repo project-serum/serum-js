@@ -369,7 +369,10 @@ export class Market {
       openOrdersAddressKey,
       feeDiscountPubkey,
     });
-    return await this._sendTransaction(connection, transaction, signers);
+    return await this._sendTransaction(connection, transaction, [
+      owner,
+      ...signers,
+    ]);
   }
 
   getSplTokenBalanceFromAccountInfo(
@@ -524,7 +527,7 @@ export class Market {
       cacheDurationMs,
     );
     const transaction = new Transaction();
-    const signers: (T | Account)[] = [owner];
+    const signers: Account[] = [];
 
     // Fetch an SRM fee discount key if the market supports discounts and it is not supplied
     feeDiscountPubkey =
@@ -626,7 +629,7 @@ export class Market {
       );
     }
 
-    return { transaction, signers };
+    return { transaction, signers, payer: owner };
   }
 
   makePlaceOrderInstruction<T extends PublicKey | Account>(
@@ -777,18 +780,19 @@ export class Market {
     }
     const { transaction, signers } = await this.makeSettleFundsTransaction(
       connection,
-      owner,
       openOrders,
       baseWallet,
       quoteWallet,
       referrerQuoteWallet,
     );
-    return await this._sendTransaction(connection, transaction, signers);
+    return await this._sendTransaction(connection, transaction, [
+      owner,
+      ...signers,
+    ]);
   }
 
   async makeSettleFundsTransaction(
     connection: Connection,
-    owner: Account,
     openOrders: OpenOrders,
     baseWallet: PublicKey,
     quoteWallet: PublicKey,
@@ -804,7 +808,7 @@ export class Market {
     );
 
     const transaction = new Transaction();
-    const signers: Account[] = [owner];
+    const signers: Account[] = [];
 
     let wrappedSolAccount: Account | null = null;
     if (
@@ -864,7 +868,7 @@ export class Market {
       );
     }
 
-    return { transaction, signers };
+    return { transaction, signers, payer: openOrders.owner };
   }
 
   async matchOrders(connection: Connection, feePayer: Account, limit: number) {
