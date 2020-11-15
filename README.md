@@ -1,6 +1,10 @@
 [![npm (scoped)](https://img.shields.io/npm/v/@project-serum/serum)](https://www.npmjs.com/package/@project-serum/serum)
 [![Build Status](https://travis-ci.com/project-serum/serum-js.svg?branch=master)](https://travis-ci.com/project-serum/serum-js)
 
+# Moved
+
+This repository has been moved to the serum-ts [monorepo](https://github.com/project-serum/serum-ts/tree/master/packages/serum).
+
 # Serum JS Client Library
 
 JavaScript client library for interacting with the Project Serum DEX.
